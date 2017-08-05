@@ -83,6 +83,11 @@ class PanelController extends Controller
                         if ($status!=true) return $status;
                     } else return false;
                 };
+                case 'test':{
+                    if ($this->chkUsers($request, $request->session()->get('login_token'), encrypt("test"), $request->input('serverid'), $request->input('playserverid'))) {
+                        echo "yes";
+                    } else echo "no";
+                }
                 default:
                     return false;
                     break;
@@ -135,6 +140,10 @@ class PanelController extends Controller
         $sock = $this->getSock($ip, $port, $code);
         if (!$sock) return true;
         else return false;
+    }
+
+    public function getinfo_server(Request $request){
+
     }
 
     public function checkUser(Request $request)
@@ -201,6 +210,8 @@ class PanelController extends Controller
     private function gate_One()
     {
         //TODO:暂时不启用本功能，将用于用户开启安全模式之后的措施
+
+
     }
 
     private function relations_users($userData, $action, $obj, $level)
@@ -208,21 +219,24 @@ class PanelController extends Controller
         $flag = false;
         if ($level == 1) {//多服务器模式
             //查找action操作是否在当前用户可操作范围内
-            $actiondata = DB::table('panel_relations')->where('basic_action', $action)->get();
-            $alldata = DB::table('panel_relations')->where('group', 1)->get();
-            $arr = array();//存入所有有权限操作action操作的权限名
-            foreach ($actiondata as $va) {
-                $arr = array_add($va->name);
-            }
-            foreach ($alldata as $value) {
-                foreach ($arr as $values) {
-                    if ($value->permission_bind == $values) $arr = array_add($value->name);
+            if(DB::table('panel_actions')->where('name',$action)->value('permission')==$userData->permission) return true;
+            else{
+                $actiondata = DB::table('panel_relations')->where('basic_action', $action)->get();
+                $alldata = DB::table('panel_relations')->where('group', 1)->get();
+                $arr = array();//存入所有有权限操作action操作的权限名
+                foreach ($actiondata as $va) {
+                    $arr = array_add($va->name);
                 }
-            }
-            foreach ($arr as $arrva) {
-                if ($userData->permission == $arrva) {
-                    $flag = true;
-                    break;
+                foreach ($alldata as $value) {
+                    foreach ($arr as $values) {
+                        if ($value->permission_bind == $values) $arr = array_add($value->name);
+                    }
+                }
+                foreach ($arr as $arrva) {
+                    if ($userData->permission == $arrva) {
+                        $flag = true;
+                        break;
+                    }
                 }
             }
         } else {//单服务器模式
@@ -273,5 +287,36 @@ class PanelController extends Controller
         $userid = $request->session()->get('userid');
         $data = DB::table('panel_users')->where('id', $userid)->first();
         return $data;
+    }
+    public function login_face(Request $request){
+        $username=$request->input('username');
+        $password=$request->input('password');
+        $road=$request->input('pushroad');
+        if(DB::table('panel_users')->where('username',$username)->first()==null){
+            $success=false;
+            $msg="用户名不存在！";
+        }else{
+            $code=str_random(16);
+            $request->session()->flash('verify_password',encrypt($password));
+            DB::table('panel_logins')->insert(['username'=>$username,'push_road'=>$road,'verify_code'=>$code,'timeout'=>date("Y-m-d H:i:s",strtotime("+5 seconds"))]);
+            $timeout=false;
+            while(DB::table('panel_logins')->where('verify_code',$code)->value('is_read')==false){
+                if(strtotime(date("Y-m-d H:i:s"))>strtotime(DB::table('panel_logins')->where('verify_code',$code)->value('timeout'))){
+                    $timeout=true;
+                    break;
+                }
+            }
+            if($timeout==false){
+                $reader=DB::table('panel_logins')->where('verify_code',$code)->value('request_msg')!=null;
+                $reader!=null?$msg=$reader:$msg="验证服务器状态出错！";
+                DB::table('panel_logins')->where('verify_code',$code)->update(['response_status'=>true]);
+                $success=true;
+            }else{
+                DB::table('panel_logins')->where('verify_code',$code)->update(['response_status'=>true,'status'=>'timeout']);
+                $msg="Auth事件处理服务器无响应！";
+                $success=false;
+            }
+        }
+        return response()->json(['success'=>$success,'msg'=>$msg]);
     }
 }

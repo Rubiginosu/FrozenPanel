@@ -19,8 +19,11 @@ Route::get('/index','FaceController@index');//将初始请求接入此处
 Route::get('/firstuse','FaceController@register');
 Route::post('/firstregis','FaceController@register_post');
 Route::group(['prefix'=>'panel'],function() {
-    Route::get('/index','PanelController@index')->middleware('checkServe');
+    Route::get('/index','PanelController@index');
     Route::post('/trybind','PanelController@try_bind');
+});
+Route::group(['prefix'=>'auth'],function() {
+    Route::post('/login','PanelController@login_face');
 });
 
 ?>
