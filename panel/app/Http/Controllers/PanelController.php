@@ -8,6 +8,7 @@ namespace App\Http\Controllers;
  */
 
 use Log;
+use App\Panel_User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
@@ -20,7 +21,37 @@ class PanelController extends Controller
 {
     public function index(Request $request)
     {
-        return view('server');
+        echo 'continue.......';
+        if($this->is_login($request)){
+            $userdata=$this->getUser($request);
+            if($userdata->permission=='superadmin'){
+                return reidrect()->action('PanelController@admin_index');
+            }else{
+                return view('server');
+            }
+        }
+    }
+
+    public function view_server(Request $request)
+    {
+        $serverid = $request->input('id');
+        $playserverid = $request->input('playid');
+        if ($this->is_login($request)) {
+            if ($this->chkUsers($request, $request->session()->get('login_token'), encrypt("view_server"), $serverid, $playserverid)) {
+                return view('server', ['key' => $this->keygen($playserverid), 'playid' => $playserverid, 'id' => $serverid]);
+            }
+        }
+    }
+
+    private function is_login($request)
+    {
+        if ($request->session()->has('userid')) {
+            $data = $this->getUser();
+            if ($data->token === $request->session()->get('login_token')) {
+                return true;
+            }
+        }
+        return redirect()->action('PanelController@login_face');
     }
 
     public function readini()
@@ -169,7 +200,6 @@ class PanelController extends Controller
         }
         $userData = $this->getUser($request);
         if ($token === $userData->token) {
-            //这先验证当前用户是否有权限操作当前服务器，再验证
             if ($userData->permission == "superadmin") return true;
             if ($this->relations_users($userData, $sign, $userData->permission, 1)) {
                 if ($this->before_chkUsers($userData) == 2 && $this->relations_server($serverID, $playserverID, $this->getUser($request), 1)) {//不等于00代表本操作是需要验证serverid的
@@ -207,13 +237,6 @@ class PanelController extends Controller
         } else {
             return "2";
         }
-    }
-
-    private function gate_One()
-    {
-        //TODO:暂时不启用本功能，将用于用户开启安全模式之后的措施
-
-
     }
 
     private function relations_users($userData, $action, $obj, $level)
@@ -392,5 +415,23 @@ class PanelController extends Controller
         } else {
             return view('panel_register');
         }
+    }
+
+    public function keygen($id)
+    {
+        $key = encrypt(str_random(32) . '|' . date("Y-m-d H:i:s"));
+        $sock = $this->getSock(0, 0, 0);
+        if ($sock != false) {
+            $sock->keyRegister($key, $id);
+        }
+        return true;
+    }
+
+    public function upload(){
+        //who cares?
+    }
+
+    public function admin_index(Request $request){
+        return view('admin_index');
     }
 }
