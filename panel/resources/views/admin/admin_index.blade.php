@@ -181,8 +181,8 @@
             <div class="item">
                 仪表盘
                 <div class="menu">
-                    <a class="active item">概览页</a>
-                    <a class="item">服务器管理</a>
+                    <a class="active item" href="#">概览页</a>
+                    <a class="item" href="{{ url('/admin/servers') }}">服务器管理</a>
                     <a class="item">权限系统</a>
                     <a class="item">用户管理</a>
                 </div>

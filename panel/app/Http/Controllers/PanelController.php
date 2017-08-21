@@ -15,18 +15,27 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Controller;
 use Illuminate\Contracts\Encryption\DecryptException;
+
+use App;
+use App\Contracts\SdkContract;
 require_once __DIR__ . '/../../../public/FrozenGo.php';
 
 class PanelController extends Controller
 {
+    //依赖注入
+    public function __construct(SdkContract $sdk)
+    {
+        $this->sdk = $sdk;
+    }
+
     public function index(Request $request)
     {
         echo 'continue.......';
-        if($this->is_login($request)){
-            $userdata=$this->getUser($request);
-            if($userdata->permission=='superadmin'){
+        if ($this->is_login($request)) {
+            $userdata = $this->sdk->getUser($request);
+            if ($userdata->permission == 'superadmin') {
                 return reidrect()->action('PanelController@admin_index');
-            }else{
+            } else {
                 return view('server');
             }
         }
@@ -46,7 +55,7 @@ class PanelController extends Controller
     private function is_login($request)
     {
         if ($request->session()->has('userid')) {
-            $data = $this->getUser();
+            $data = $this->sdk->getUser();
             if ($data->token === $request->session()->get('login_token')) {
                 return true;
             }
@@ -60,26 +69,9 @@ class PanelController extends Controller
         return $serverINI;
     }
 
-    private function getSock($ip, $port, $code)
-    {
-        $SDK = new FrozenGo();
-        if ($ip == 0 || $port == 0 || $code == 0) {
-            $SDK->ip = DB::table('panel_config')->where('name', 'daemon_ip')->value('value');
-            $SDK->port = DB::table('panel_config')->where('name', 'daemon_port')->value('value');
-            $SDK->verifyCode = DB::table('panel_config')->where('name', 'daemon_verifyCode')->value('value');
-        } else {
-            $SDK->ip = $ip;
-            $SDK->port = $port;
-            $SDK->verifyCode = $code;
-        }
-        $data = $SDK->getServerList();
-        if ($data[0] == -1) return false;
-        else return $SDK;
-    }
-
     public function portal(Request $request)
     {
-        $sock = $this->getSock(0, 0, 0);//获取socket对象
+        $sock = $this->sdk->getSock(0, 0, 0);//获取socket对象
         if ($sock != false) {
             switch ($request->input('action')) {
                 case 'start': {
@@ -169,7 +161,7 @@ class PanelController extends Controller
         $ip = $request->input('ip');
         $port = $request->input('port');
         $code = $request->input('code');
-        $sock = $this->getSock($ip, $port, $code);
+        $sock = $this->sdk->getSock($ip, $port, $code);
         if (!$sock) return true;
         else return false;
     }
@@ -198,18 +190,18 @@ class PanelController extends Controller
         } catch (DecryptException $e) {
             return false;
         }
-        $userData = $this->getUser($request);
+        $userData = $this->sdk->getUser($request);
         if ($token === $userData->token) {
             if ($userData->permission == "superadmin") return true;
             if ($this->relations_users($userData, $sign, $userData->permission, 1)) {
-                if ($this->before_chkUsers($userData) == 2 && $this->relations_server($serverID, $playserverID, $this->getUser($request), 1)) {//不等于00代表本操作是需要验证serverid的
+                if ($this->before_chkUsers($userData) == 2 && $this->relations_server($serverID, $playserverID, $this->sdk->getUser($request), 1)) {//不等于00代表本操作是需要验证serverid的
                     $permitID = str_random(32);
                     $sessionLog = $permitID . '.' . $sign;
                     $request->session()->put('permitID', $sessionLog);
                     DB::table('panel_actions')->where('name', $sign)->update(['lastest_user' => $userData->username, 'permitID' => $permitID]);
                     Log::info("准许用户：" . $userData->username . "进行：" . $sign . "操作！");
                     return true;
-                } else if ($this->before_chkUsers($userData) == 1 && $this->relations_server($serverID, $playserverID, $this->getUser($request), 2)) {
+                } else if ($this->before_chkUsers($userData) == 1 && $this->relations_server($serverID, $playserverID, $this->sdk->getUser($request), 2)) {
                     $permitID = str_random(32);
                     $sessionLog = $permitID . '.' . $sign;
                     $request->session()->put('permitID', $sessionLog);
@@ -307,131 +299,28 @@ class PanelController extends Controller
         else return false;
     }
 
-    private function getUser(Request $request)
-    {
-        $userid = $request->session()->get('userid');
-        $data = DB::table('panel_users')->where('id', $userid)->first();
-        return $data;
-    }
-
-    public function login_face(Request $request)
-    {
-        if ($request->isMethod('post')) {
-            $username = $request->input('username');
-            $password = $request->input('password');
-            $road = $request->input('pushroad');
-            if (DB::table('panel_users')->where('username', $username)->first() == null) {
-                $success = false;
-                $msg = "登录信息不正确！";
-            } else if ($request->session()->has('userid')) {
-                $success = false;
-                $msg = "您已经登录，请勿重复登录！";
-            } else {
-                $code = str_random(16);
-                $request->session()->put('verify_password_' . $code, encrypt($password));
-                DB::table('panel_logins')->insert(['username' => $username, 'push_road' => $road, 'verify_code' => $code, 'timeout' => date("Y-m-d H:i:s", strtotime("+5 seconds"))]);
-                $timeout = false;
-                while (DB::table('panel_logins')->where('verify_code', $code)->value('is_read') == false) {
-                    if (strtotime(date("Y-m-d H:i:s")) > strtotime(DB::table('panel_logins')->where('verify_code', $code)->value('timeout'))) {
-                        $timeout = true;
-                        break;
-                    }
-                }
-                if ($timeout == false) {
-                    $reader = DB::table('panel_logins')->where('verify_code', $code)->value('request_msg') != null;
-                    $reader != null ? $msg = $reader : $msg = "验证服务器状态出错！";
-                    DB::table('panel_logins')->where('verify_code', $code)->update(['response_status' => true]);
-                    $success = true;
-                } else {
-                    DB::table('panel_logins')->where('verify_code', $code)->update(['response_status' => true, 'status' => 'timeout']);
-                    $msg = "Auth事件处理服务器无响应！";
-                    $success = false;
-                }
-            }
-            return response()->json(['success' => $success, 'msg' => $msg]);
-        } else {
-            return view('panel_login');
-        }
-    }
-
-    public function login_time(Request $request)
-    {
-        $allrows = DB::table('panel_logins')->where([['is_read', false], ['status', 'null']])->get();
-        foreach ($allrows as $row) {
-            if ($request->session()->has('verify_password_' . $row->verify_code)) {
-                try {
-                    $password = decrypy($request->session()->get('verify_password_' . $row->verify_code));
-                } catch (Exception $e) {
-                    $request->session()->flash('verify_password_' . $row->verify_code);
-                    DB::table('panel_logins')->where('verify_code', $row->verify_code)->update(['status' => 'error', 'is_read' => true, 'request_msg' => '用户登录请求异常！']);
-                    return false;
-                }
-                $username = $row->username;
-                $userdata = DB::table('panel_users')->where('username', $username)->first();
-                if (!$userdata->black_list) {
-                    if (decrypt($userdata->password) === $password) {
-                        $request->session()->flash('verify_password_' . $row->verify_code);
-                        $request->session()->put('userid', $userdata->id);
-                        $token = str_random(32);
-                        $request->session()->put('login_token', $token);
-                        DB::table('panel_users')->where('username', $row->username)->update(['lastest_ip' => $request->getClientIp(), 'token' => $token, 'updated_time' => date("Y-m-d H:i:s")]);
-                        DB::table('panel_logins')->where('verify_code', $row->verify_code)->update(['status' => 'success', 'is_read' => true, 'request_msg' => '用户登录成功！']);
-                        Log::info("用户（" . $row->username . "）登陆成功！");
-                        $success = true;
-                    } else {
-                        $request->session()->flash('verify_password_' . $row->verify_code);
-                        DB::table('panel_logins')->where('verify_code', $row->verify_code)->update(['status' => 'error', 'is_read' => true, 'request_msg' => '登录信息不正确！']);
-                        Log::info("用户（" . $row->username . "）登陆失败，原因为密码不正确！");
-                        $success = false;
-                    }
-                } else {
-                    $request->session()->flash('verify_password_' . $row->verify_code);
-                    DB::table('panel_logins')->where('verify_code', $row->verify_code)->update(['status' => 'error', 'is_read' => true, 'request_msg' => '您被禁止登陆！']);
-                    Log::info("用户（" . $row->username . "）登陆失败，原因为用户已在黑名单内！");
-                    $success = false;
-                }
-            }
-            continue;
-        }
-    }
-
-    public function register(Request $request)
-    {
-        if ($request->isMethod('post')) {
-            $username = $request->input('username');
-            $password = encrypt($request->input('password'));
-            $phone = $request->input('phone');
-            $email = $request->input('email');
-            if (DB::table('panel_users')->where('username', $username)->first() == null) {
-                $userkey = str_random(24);
-                DB::table('panel_users')->insert(['username' => $username, 'password' => $password, 'email' => $email, 'phone' => $phone, 'key' => $userkey, 'created_time' => date("Y-m-d H:i:s")]);
-                $success = true;
-                $msg = "创建账户成功！";
-            } else {
-                $success = false;
-                $msg = "用户名已经存在，请更换";
-            }
-            return response()->json(['success' => $success, 'msg' => $msg]);
-        } else {
-            return view('panel_register');
-        }
-    }
-
     public function keygen($id)
     {
         $key = encrypt(str_random(32) . '|' . date("Y-m-d H:i:s"));
-        $sock = $this->getSock(0, 0, 0);
+        $sock = $this->sdk->getSock(0, 0, 0);
         if ($sock != false) {
             $sock->keyRegister($key, $id);
         }
         return true;
     }
 
-    public function upload(){
+    public function upload()
+    {
         //who cares?
     }
 
-    public function admin_index(Request $request){
-        return view('admin_index');
+    public function admin_index(Request $request)
+    {
+        return view('admin.admin_index');
+    }
+
+    public function admin_servers(Request $request)
+    {
+        return view('admin.admin_servers');
     }
 }

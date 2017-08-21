@@ -22,8 +22,13 @@ Route::group(['prefix'=>'panel'],function() {
     Route::get('/index','PanelController@index');
     Route::post('/trybind','PanelController@try_bind');
 });
+Route::group(['prefix'=>'admin'],function(){
+    Route::get('/index','PanelController@admin_index');
+    Route::get('/servers','PanelController@admin_servers');
+});
 Route::group(['prefix'=>'auth'],function() {
     Route::post('/login','PanelController@login_face');
+    Route::post('/register','PanelController@register_face');
 });
 
 ?>
