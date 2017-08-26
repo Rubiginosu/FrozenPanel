@@ -177,6 +177,7 @@ class PanelController extends Controller
          * 此功能充当Panel用户组的核心结构
          * 返回true代表有权限进行本次操作，false代表无权限
          * @param opeareID：服务器ID
+         * @param actionSign: 操作名（使用encrypt加密）
          * 使用规则：当操作涉及到验证用户所属服务器时务必先调用relations_server(),当用户权限仅有三种基本权限时可调用relations_users的level 2
          */
         $status = $this->chkUsers($request, $request->session()->get('login_token'), $request->input('actionSign'), $request->input('serverID'), $request->input('play_serverID'));
@@ -307,11 +308,6 @@ class PanelController extends Controller
             $sock->keyRegister($key, $id);
         }
         return true;
-    }
-
-    public function upload()
-    {
-        //who cares?
     }
 
     public function admin_index(Request $request)

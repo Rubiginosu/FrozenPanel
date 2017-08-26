@@ -2,6 +2,7 @@
 
 namespace App\Console;
 
+use DB;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
@@ -24,8 +25,14 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        // $schedule->command('inspire')
-        //          ->hourly();
+        $schedule->call(function () {
+            if(DB::table('panel_config')->where('name','Auth_serve')->value('value')=='true'){
+                for($i=0;$i<=27;$i++) {
+                    file_get_contents(action('PanelAuthController@login_time'));
+                    sleep(2);
+                }
+            }
+        })->everyMinute();
     }
 
     /**

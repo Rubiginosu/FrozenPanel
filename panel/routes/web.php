@@ -27,8 +27,13 @@ Route::group(['prefix'=>'admin'],function(){
     Route::get('/servers','PanelController@admin_servers');
 });
 Route::group(['prefix'=>'auth'],function() {
-    Route::post('/login','PanelController@login_face');
-    Route::post('/register','PanelController@register_face');
+    Route::match(['post','get'],'/login','PanelAuthController@login_face');
+    Route::get('/login_time','PanelAuthController@login_time');
+    Route::post('/register','PanelAuthController@register');
+    Route::get('/logout','PanelAuthController@logout');
+});
+Route::group(['prefix'=>'test'],function(){
+    Route::get('/insert','TestController@insert');
 });
 
 ?>
