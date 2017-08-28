@@ -21,6 +21,7 @@ class PanelRelations extends Migration
             $table->text('name');//权限名（superadmin和admin以及buyer为基本权限不可覆盖也不可同名）
             $table->text('permission_bind')->nullable();//emmmmm在这里可以填写已有的权限名，填写后将实现对应权限名已有的所有权限
             $table->text('permission_grade')->nullable();//快捷通道，代表权限等级，只能填写(super,admin,buyer)，分别代表：最高权限，中等权限，最低权限
+            $table->text('limit_serverid')->nullable();//限制指定服务器内使用
             //接下来是自定义数据
             $table->text('basic_action')->nullable();//填写系统内的权限名（通常是填写actions表内的操作名）
             $table->timestamps();

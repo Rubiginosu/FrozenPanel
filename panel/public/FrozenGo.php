@@ -146,9 +146,7 @@ class FrozenGo
         return $this->SockResult("ExecInstall", $id, $url);
 
     }
-    // TODO 尽快修好！
-    // 下面两个正在调试
-    // !!! With Bug...
+
     public function startServer($id)
     {
         return $this->SockResult("Start", $id);
@@ -168,6 +166,7 @@ class FrozenGo
     /**
      * @param $id
      * 服务器id
+     * @return s
      */
     public function getServerConfig($id)
     {
@@ -238,7 +237,9 @@ class FrozenGo
     {
         $socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
         $conn = socket_connect($socket, $this->ip, $this->port);
-        if ($conn < 0) {
+        socket_set_option($socket,SOL_SOCKET,SO_RCVTIMEO,array("sec"=>1, "usec"=>0 ) );
+        socket_set_option($socket,SOL_SOCKET,SO_SNDTIMEO,array("sec"=>3, "usec"=>0 ) );
+        if (!$conn) {
             return "5" . socket_strerror($conn);
         }
         $Req = new Request();

@@ -23,8 +23,9 @@ class PanelUsers extends Migration
             $table->text('lastest_ip')->nullable();
             $table->boolean('black_list')->default(false);
             $table->boolean('double_check')->default(false);
+            $table->text('key');
             $table->text('token')->nullable();
-            $table->text('permission')->default('standard');//用户权限（superadmin,admin,buyer)
+            $table->text('permission')->default('standard');//用户权限（superadmin,admin,buyer),standard表示无任何权限
             $table->timestamps();
         });
     }

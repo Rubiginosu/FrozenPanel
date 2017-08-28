@@ -31,14 +31,14 @@ class PanelController extends Controller
     public function index(Request $request)
     {
         echo 'continue.......';
-        if ($this->is_login($request)) {
+        if ($this->sdk->is_login($request)) {
             $userdata = $this->sdk->getUser($request);
             if ($userdata->permission == 'superadmin') {
-                return reidrect()->action('PanelController@admin_index');
+                return redirect()->action('PanelController@admin_index');
             } else {
                 return view('server');
             }
-        }
+        } else return redirect()->action('PanelAuthController@login_face');
     }
 
     public function view_server(Request $request)
@@ -50,17 +50,6 @@ class PanelController extends Controller
                 return view('server', ['key' => $this->keygen($playserverid), 'playid' => $playserverid, 'id' => $serverid]);
             }
         }
-    }
-
-    private function is_login($request)
-    {
-        if ($request->session()->has('userid')) {
-            $data = $this->sdk->getUser();
-            if ($data->token === $request->session()->get('login_token')) {
-                return true;
-            }
-        }
-        return redirect()->action('PanelController@login_face');
     }
 
     public function readini()
@@ -177,7 +166,7 @@ class PanelController extends Controller
          * 此功能充当Panel用户组的核心结构
          * 返回true代表有权限进行本次操作，false代表无权限
          * @param opeareID：服务器ID
-         * @param actionSign: 操作名（使用encrypt加密）
+         * @param actionSign : 操作名（使用encrypt加密）
          * 使用规则：当操作涉及到验证用户所属服务器时务必先调用relations_server(),当用户权限仅有三种基本权限时可调用relations_users的level 2
          */
         $status = $this->chkUsers($request, $request->session()->get('login_token'), $request->input('actionSign'), $request->input('serverID'), $request->input('play_serverID'));
@@ -191,27 +180,40 @@ class PanelController extends Controller
         } catch (DecryptException $e) {
             return false;
         }
-        $userData = $this->sdk->getUser($request);
+        Log::info('权限检查被调用！' . $sign);
+        if ($this->sdk->is_login($request)) $userData = $this->sdk->getUser($request);
         if ($token === $userData->token) {
-            if ($userData->permission == "superadmin") return true;
+            if ($userData->permission == "superadmin") {
+                Log::info("准许用户（超级管理员）：" . $userData->username . "，进行：" . $sign . "操作！");
+                return true;
+            }
             if ($this->relations_users($userData, $sign, $userData->permission, 1)) {
-                if ($this->before_chkUsers($userData) == 2 && $this->relations_server($serverID, $playserverID, $this->sdk->getUser($request), 1)) {//不等于00代表本操作是需要验证serverid的
-                    $permitID = str_random(32);
-                    $sessionLog = $permitID . '.' . $sign;
-                    $request->session()->put('permitID', $sessionLog);
-                    DB::table('panel_actions')->where('name', $sign)->update(['lastest_user' => $userData->username, 'permitID' => $permitID]);
-                    Log::info("准许用户：" . $userData->username . "进行：" . $sign . "操作！");
-                    return true;
-                } else if ($this->before_chkUsers($userData) == 1 && $this->relations_server($serverID, $playserverID, $this->sdk->getUser($request), 2)) {
-                    $permitID = str_random(32);
-                    $sessionLog = $permitID . '.' . $sign;
-                    $request->session()->put('permitID', $sessionLog);
-                    DB::table('panel_actions')->where('name', $sign)->update(['lastest_user' => $userData->username, 'permitID' => $permitID]);
-                    Log::info("准许用户：" . $userData->username . "进行：" . $sign . "操作！");
-                    return true;
+                if (DB::table('panel_actions')->where('name', $sign)->value('need_server') == true) {
+                    if ($this->before_chkUsers($userData) == 2 && $this->relations_server($serverID, $playserverID, $this->sdk->getUser($request), 1)) {//不等于00代表本操作是需要验证serverid的
+                        $permitID = str_random(32);
+                        $sessionLog = $permitID . '.' . $sign;
+                        $request->session()->put('permitID', $sessionLog);
+                        DB::table('panel_actions')->where('name', $sign)->update(['lastest_user' => $userData->username, 'permitID' => $permitID]);
+                        Log::info("准许用户：" . $userData->username . "，进行：" . $sign . "操作！");
+                        return true;
+                    } else if ($this->before_chkUsers($userData) == 1 && $this->relations_server($serverID, $playserverID, $this->sdk->getUser($request), 2)) {
+                        $permitID = str_random(32);
+                        $sessionLog = $permitID . '.' . $sign;
+                        $request->session()->put('permitID', $sessionLog);
+                        DB::table('panel_actions')->where('name', $sign)->update(['lastest_user' => $userData->username, 'permitID' => $permitID]);
+                        Log::info("准许用户：" . $userData->username . "，进行：" . $sign . "操作！");
+                        return true;
+                    } else {
+                        Log::info("进行用户权限检查时发生错误：用户（" . $userData->username . "）没有进行操作：" . $sign . "的权限！");
+                        return false;
+                    }
                 } else {
-                    Log::info("进行用户权限检查时发生错误：用户（" . $userData->username . "）没有进行操作：" . $sign . "的权限！");
-                    return false;
+                    $permitID = str_random(32);
+                    $sessionLog = $permitID . '.' . $sign;
+                    $request->session()->put('permitID', $sessionLog);
+                    DB::table('panel_actions')->where('name', $sign)->update(['lastest_user' => $userData->username, 'permitID' => $permitID]);
+                    Log::info("准许用户：" . $userData->username . "，进行：" . $sign . "操作！");
+                    return true;
                 }
             } else {
                 Log::info("进行用户权限检查时发生错误：用户（" . $userData->username . "）没有进行操作：" . $sign . "的权限！");
@@ -243,11 +245,11 @@ class PanelController extends Controller
                 $alldata = DB::table('panel_relations')->where('group', 1)->get();
                 $arr = array();//存入所有有权限操作action操作的权限名
                 foreach ($actiondata as $va) {
-                    $arr = array_add($va->name);
+                    $arr = array_prepend($arr, $va->name);
                 }
                 foreach ($alldata as $value) {
                     foreach ($arr as $values) {
-                        if ($value->permission_bind == $values) $arr = array_add($value->name);
+                        if ($value->permission_bind == $values) $arr = array_prepend($arr, $value->name);
                     }
                 }
                 foreach ($arr as $arrva) {
@@ -312,7 +314,17 @@ class PanelController extends Controller
 
     public function admin_index(Request $request)
     {
-        return view('admin.admin_index');
+        if ($this->sdk->is_login($request)) {
+            if ($this->chkUsers($request, $request->session()->get('login_token'), encrypt('open_admin_index'), 0, 0)) {
+                $userdata = $this->sdk->getUser($request);
+                $daemon_ip = DB::table('panel_config')->where('name', 'daemon_ip')->get();
+                $request->session()->flash('daemon_data', $daemon_ip);
+                $daemonstatus = true;
+                return view('admin.admin_index', ['username' => $userdata->username, 'usercount' => count($userdata), 'daemon' => $daemon_ip, 'daemon_status' => $daemonstatus]);
+            } else echo 'permission died';
+        } else {
+            return redirect()->action('PanelAuthController@login_face');
+        }
     }
 
     public function admin_servers(Request $request)

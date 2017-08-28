@@ -20,6 +20,7 @@ class PanelActions extends Migration
             $table->text('permission')->default('standard');//用户所需权限（superadmin,admin,buyer)
             $table->text('lastest_user')->nullable();//最后调用本操作的用户
             $table->text('permitID')->nullable();//用户操作合法的证书ID
+            $table->boolean('need_server');//该操作是否需要验证服务器组
             $table->timestamps();
         });
     }

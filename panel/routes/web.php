@@ -35,5 +35,8 @@ Route::group(['prefix'=>'auth'],function() {
 Route::group(['prefix'=>'test'],function(){
     Route::get('/insert','TestController@insert');
 });
+Route::group(['prefix'=>'api'],function(){
+    Route::post('/daemon_test','ApiController@daemon_test');
+});
 
 ?>

@@ -18,7 +18,9 @@ class PanelLogins extends Migration
             $table->text('username');
             $table->text('push_road');
             $table->text('verify_code');
-            $table->text('timeout');
+            $table->text('status')->default('null');
+            $table->text('request_msg')->nullable();
+            $table->text('timeout')->default('false');
             $table->boolean('is_read');
             $table->timestamps();
         });

@@ -45,7 +45,7 @@ class PanelAuthController extends Controller
                     }
                 }
                 if ($timeout == false) {
-                    $reader = DB::table('panel_logins')->where('verify_code', $code)->value('request_msg') != null;
+                    $reader = DB::table('panel_logins')->where('verify_code', $code)->value('request_msg');
                     $reader != null ? $msg = $reader : $msg = "验证服务器状态出错！";
                     if (DB::table('panel_logins')->where('verify_code', $code)->value('status') == 'success') {
                         $userdata = DB::table('panel_users')->where('username', $username)->first();
@@ -66,19 +66,20 @@ class PanelAuthController extends Controller
             }
             return response()->json(['success' => $success, 'msg' => $msg]);
         } else {
-            return view('Auth.panel_login');
+            if ($this->sdk->is_login($request)) return redirect()->action('PanelController@index');
+            else return view('Auth.panel_login');
         }
     }
 
     public function login_time(Request $request)
     {
         //进行预处理
-        if (DB::table('panel_logins')->where([['is_read', true], ['response_status', 'null']])->first() != null) {
+        if (DB::table('panel_logins')->where([['is_read', true], ['response_status', true]])->first() != null) {
             $none_response = DB::table('panel_logins')->where([['is_read', true], ['response_status', false]])->get();
             foreach ($none_response as $none) {
                 $errortime = date("Y-m-d H:i:s", strtotime("+1 hour", strtotime($none->timeout)));
                 if (strtotime(date("Y-m-d H:i:s")) > strtotime($errortime)) {
-                    DB::table('panel_users')->where('username', $none->username)->update(['black_list' => true, 'token' => '', 'updated_at' => date("Y-m-d H:i:s")]);
+                    //DB::table('panel_users')->where('username', $none->username)->update(['black_list' => true, 'token' => '', 'updated_at' => date("Y-m-d H:i:s")]);
                     Log::error("【登录id：" . $none->verify_code . "】登录请求源头未处理返回，疑似非法调用，系统已执行封号处理。");
                     DB::table('panel_logins')->where('verify_code', $none->verify_code)->update(['response_status' => true, 'msg' => '疑似非法，已拦截', 'status' => 'error']);
                 }
@@ -151,10 +152,10 @@ class PanelAuthController extends Controller
             DB::table('panel_users')->where('username', $userdata->username)->update(['token' => '']);
             Log::info("用户（" . $userdata->username . "）退出成功！");
             $msg = '您已成功退出！';
-            return response()->json(['success' => true, 'msg' => $msg]);
+            return redirect()->action('PanelAuthController@login_face');
         } else {
             $msg = '您还未登录！';
-            return response()->json(['success' => false, 'msg' => $msg]);
+            return redirect()->action('PanelAuthController@login_face');
         }
     }
 }
